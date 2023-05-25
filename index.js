@@ -16,7 +16,23 @@ const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster
 
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
 
+function verifyJWT(req, res, next) {
+    const authHeader = req.headers.authorization
+    console.log(req.headers);
+    if (!authHeader) {
+        return res.status(401).send({ message: 'unauthorized ' })
+    }
+    const token = authHeader.split(' ')[1]
+    jwt.verify(token, process.env.ACCESS_WEB_TOKEN, function (err, decoded) {
+        if (err) {
+            return res.status(401).send({ message: 'unauthorized ' })
+        }
+        req.decoded = decoded;
+        next();
 
+
+    });
+}
 
 async function run() {
     try {
@@ -34,16 +50,17 @@ async function run() {
         const orderCollection = client.db("newGeniusCar").collection("orders");
 
         app.get('/services', async (req, res) => {
+            console.log("services loaded");
             const query = {};
             const cursor = newGeniurCarCollection.find(query);
             const services = await cursor.toArray();
             res.send(services);
         });
 
+        //
         app.post('/jwt', async (req, res) => {
             const user = req.body;
             const token = jwt.sign(user, process.env.ACCESS_WEB_TOKEN, { expiresIn: '1h' })
-            console.log(token);
             res.send({ token })
 
 
@@ -58,10 +75,9 @@ async function run() {
             res.send(service)
         });
 
-
+        // orders api
         app.post('/orders', async (req, res) => {
             const data = req.body;
-
             // const doc = { data: data }
             const result = await orderCollection.insertOne(data);
             res.send(result)
@@ -69,7 +85,30 @@ async function run() {
             console.log(result);
 
         })
-        app.get('/orders/:email', async (req, res) => {
+
+
+        app.get('/orders', verifyJWT, async (req, res) => {
+
+            // const decoded = req.decoded;
+            // console.log(decoded);
+            // if (decoded.email !== req.query.email) {
+            //     res.status(403).send({ message: 'unauthorized access!!' })
+            // }
+
+            let query = {}
+            if (req.query.email) {
+                query = {
+                    email: req.query.email
+                }
+            }
+            const cursor = orderCollection.find(query)
+            const result = await cursor.toArray()
+            res.send(result)
+        })
+
+
+        app.get('/orders/:email', verifyJWT, async (req, res) => {
+
             const userEmail = req.params.email;
 
             const query = { email: userEmail }
@@ -78,15 +117,22 @@ async function run() {
             const result = await orders.toArray()
             res.send(result)
 
-
         })
-        app.get('/orders', async (req, res) => {
-            const query = {};
-            const cursor = orderCollection.find(query);
-            const services = await cursor.toArray();
-            res.send(services);
 
-        })
+
+
+
+        // app.get('/orders', verifyJWT, async (req, res) => {
+        //     const decoded = req.decoded;
+        //     console.log("inside the orders api", decoded);
+
+
+        //     const query = {};
+        //     const cursor = orderCollection.find(query);
+        //     const services = await cursor.toArray();
+        //     res.send(services);
+
+        // })
 
 
 
